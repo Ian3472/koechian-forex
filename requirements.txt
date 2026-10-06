@@ -1,8 +1,8 @@
-flask
-gunicorn
-numpy
-pandas
+Flask
+Flask-SQLAlchemy
+Flask-Login
+Werkzeug
 yfinance
-pandas-ta-classic
-flask-login
-flask-sqlalchemy
+pandas_ta_classic
+binance-and-crypto-payment
+gunicorn
