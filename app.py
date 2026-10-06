@@ -165,20 +165,20 @@ def deposit():
     current_user.balance += amount
     db.session.commit()
     return jsonify({"status": "success", "message": f"Deposit of ${amount} successful! New balance: ${current_user.balance}"})
-
-# --- UPDATED WITHDRAW ROUTE WITH PAYERURL ---
 @app.route('/api/withdraw', methods=['POST'])
 @login_required
 def withdraw():
+    # Check if API keys are configured
+    if not os.getenv("PAYERURL_PUBLIC_KEY") or not os.getenv("PAYERURL_SECRET_KEY"):
+        return jsonify({"status": "error", "message": "Payment gateway not configured. Missing API keys."}), 500
+
     amount = float(request.json.get('amount', 10))
     if amount > current_user.balance:
         return jsonify({"status": "error", "message": "Insufficient funds!"})
 
-    # Create a unique invoice ID for this withdrawal
     invoice_id = f"WD-{current_user.id}-{int(time.time())}"
-
+    
     try:
-        # Call PayerURL API to process the payout
         response = client.payment(
             invoice_id=invoice_id,
             amount=amount,
@@ -192,7 +192,7 @@ def withdraw():
                 "cancel_url": f"{BASE_URL}/dashboard",
             }
         )
-
+        
         if response.get("status"):
             # Deduct balance only if the API call was successful
             current_user.balance -= amount
@@ -204,7 +204,7 @@ def withdraw():
             })
         else:
             return jsonify({"status": "error", "message": "Payment gateway error."}), 400
-
+            
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
