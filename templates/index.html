@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KoechIan Forex Trading system</title>
+    <script src="/static/lightweight-charts.js"></script>
+    <style>
+        body { background-color: #0d1117; color: #c9d1d9; font-family: Arial, sans-serif; margin: 0; padding: 10px; }
+        .nav { display: flex; justify-content: space-between; align-items: center; background: #161b22; padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #30363d; }
+        .nav h2 { margin: 0; color: #58a6ff; font-size: 1.2em; }
+        .nav a { color: #c9d1d9; text-decoration: none; margin-left: 10px; font-weight: bold; font-size: 0.9em; }
+        .auth-container { max-width: 400px; margin: 50px auto; background: #161b22; padding: 30px; border-radius: 10px; border: 1px solid #30363d; }
+        .auth-container input { width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #30363d; background: #0d1117; color: white; box-sizing: border-box; }
+        .auth-container button { width: 100%; padding: 12px; background: #238636; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 16px; }
+        .flash { color: #f85149; text-align: center; margin-bottom: 15px; }
+        #chart { width: 100%; height: 400px; margin-bottom: 15px; border: 1px solid #30363d; border-radius: 8px; }
+        .panel { background: #161b22; padding: 15px; border-radius: 8px; border: 1px solid #30363d; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+        button { padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+        .btn-deposit { background: #238636; color: white; }
+        .btn-withdraw { background: #da3633; color: white; }
+        .signal-box { text-align: center; margin-top: 15px; font-size: 1.1em; }
+        .signal-buy { color: #3fb950; font-weight: bold; }
+        .signal-sell { color: #f85149; font-weight: bold; }
+        .signal-hold { color: #d29922; font-weight: bold; }
+        .balance { font-size: 1.4em; text-align: center; margin: 15px 0; color: #3fb950; font-weight: bold; }
+        .ticker { text-align: center; font-size: 0.9em; color: #8b949e; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="nav">
+        <h2>KoechIan Forex</h2>
+        <div>
+            {% if current_user.is_authenticated %}
+                <span>👤 {{ current_user.username }}</span>
+                <a href="/logout">Logout</a>
+            {% else %}
+                <a href="/login">Login</a>
+                <a href="/register">Register</a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if auth_view == 'login' %}
+    <div class="auth-container">
+        <h2 style="text-align:center;">Login</h2>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %} <div class="flash">{{ message }}</div> {% endfor %}
+        {% endwith %}
+        <form method="POST" action="/login">
+            <input type="text" name="username" placeholder="Username" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">Log In</button>
+        </form>
+    </div>
+    {% elif auth_view == 'register' %}
+    <div class="auth-container">
+        <h2 style="text-align:center;">Register</h2>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %} <div class="flash">{{ message }}</div> {% endfor %}
+        {% endwith %}
+        <form method="POST" action="/register">
+            <input type="text" name="username" placeholder="Username" required>
+            <input type="email" name="email" placeholder="Email" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">Create Account</button>
+        </form>
+    </div>
+    {% elif auth_view == 'dashboard' %}
+        <div class="balance">Balance: ${{ "%.2f"|format(user.balance) }}</div>
+        <div class="ticker" id="ticker">EUR/USD | Connecting...</div>
+        
+        <div id="chart"></div>
+
+        <div class="panel">
+            <button class="btn-deposit" onclick="makeDeposit()">Deposit USD</button>
+            <button class="btn-withdraw" onclick="makeWithdraw()">Withdraw USD</button>
+        </div>
+
+        <div class="signal-box" id="signal-box">
+            Analyzing market data...
+        </div>
+
+        <script>
+            const chartElement = document.getElementById('chart');
+            const chart = LightweightCharts.createChart(chartElement, {
+                width: chartElement.clientWidth,
+                height: 400,
+                layout: { background: { color: '#0d1117' }, textColor: '#c9d1d9' },
+                grid: { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                    vertLine: { color: '#58a6ff', width: 1, labelBackgroundColor: '#58a6ff' },
+                    horzLine: { color: '#58a6ff', width: 1, labelBackgroundColor: '#58a6ff' },
+                },
+                rightPriceScale: { borderColor: '#30363d' },
+                timeScale: { borderColor: '#30363d', timeVisible: true, secondsVisible: false },
+            });
+
+            const candleSeries = chart.addCandlestickSeries({
+                upColor: '#3fb950', downColor: '#f85149',
+                borderUpColor: '#3fb950', borderDownColor: '#f85149',
+                wickUpColor: '#3fb950', wickDownColor: '#f85149',
+                priceLineVisible: true, lastValueVisible: true,
+            });
+
+            // Initial load
+            fetch('/api/ohlc').then(res => res.json()).then(data => {
+                candleSeries.setData(data);
+                chart.timeScale().fitContent();
+                document.getElementById('ticker').innerText = `EUR/USD | Last Price: ${data[data.length-1].close.toFixed(5)}`;
+            }).catch(e => console.error("OHLC error:", e));
+
+            // Signal
+            fetch('/api/signal').then(res => res.json()).then(data => {
+                const box = document.getElementById('signal-box');
+                let className = 'signal-hold';
+                if (data.signal === 'BUY') className = 'signal-buy';
+                if (data.signal === 'SELL') className = 'signal-sell';
+                box.innerHTML = `Signal: <span class="${className}">${data.signal}</span> | RSI: ${data.rsi}`;
+            }).catch(e => console.error("Signal error:", e));
+
+            // THE RUNNING CURVE: Updates every 1 second
+            setInterval(() => {
+                fetch('/api/live_tick').then(res => res.json()).then(candle => {
+                    candleSeries.update(candle);
+                    document.getElementById('ticker').innerText = `EUR/USD | Live Price: ${candle.close.toFixed(5)}`;
+                }).catch(e => console.log("Waiting for tick..."));
+            }, 1000);
+
+            function makeDeposit() {
+                fetch('/api/deposit', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amount: 50 })
+                }).then(res => res.json()).then(data => { alert(data.message); location.reload(); });
+            }
+
+            function makeWithdraw() {
+                fetch('/api/withdraw', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amount: 25, address: 'your-wallet' })
+                }).then(res => res.json()).then(data => { alert(data.message); location.reload(); });
+            }
+
+            window.addEventListener('resize', () => {
+                chart.applyOptions({ width: chartElement.clientWidth });
+            });
+        </script>
+    {% endif %}
+
+</body>
+</html>
+

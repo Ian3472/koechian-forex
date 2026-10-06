@@ -1,0 +1,1 @@
+Redirecting to /lightweight-charts@5.2.1/dist/lightweight-charts.standalone.production.js
