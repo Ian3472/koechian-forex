@@ -165,8 +165,7 @@ def withdraw():
     current_user.balance -= amount
     db.session.commit()
     return jsonify({"status": "success", "message": f"Withdrawal of ${amount} initiated. New balance: ${current_user.balance}"})
-
-python
+    
 with app.app_context():
     db.create_all()
 
