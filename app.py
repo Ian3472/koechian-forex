@@ -4,6 +4,9 @@ import random
 import time
 from datetime import datetime
 
+# --- PayerURL Integration ---
+from binance_and_crypto_payment import CryptoPaymentClient
+
 # --- Fallback for Termux (Real data only works on Render) ---
 try:
     import yfinance as yf
@@ -25,6 +28,13 @@ db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+# --- PayerURL Client Initialization ---
+client = CryptoPaymentClient(
+    public_key=os.getenv("PAYERURL_PUBLIC_KEY"),
+    secret_key=os.getenv("PAYERURL_SECRET_KEY")
+)
+BASE_URL = os.getenv("BASE_URL", "http://localhost:5000").rstrip("/")
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -156,16 +166,56 @@ def deposit():
     db.session.commit()
     return jsonify({"status": "success", "message": f"Deposit of ${amount} successful! New balance: ${current_user.balance}"})
 
+# --- UPDATED WITHDRAW ROUTE WITH PAYERURL ---
 @app.route('/api/withdraw', methods=['POST'])
 @login_required
 def withdraw():
     amount = float(request.json.get('amount', 10))
     if amount > current_user.balance:
         return jsonify({"status": "error", "message": "Insufficient funds!"})
-    current_user.balance -= amount
-    db.session.commit()
-    # FIXED: Completed the jsonify dictionary and function call
-    return jsonify({"status": "success", "message": f"Withdrawal of ${amount} successful! New balance: ${current_user.balance}"})
+
+    # Create a unique invoice ID for this withdrawal
+    invoice_id = f"WD-{current_user.id}-{int(time.time())}"
+
+    try:
+        # Call PayerURL API to process the payout
+        response = client.payment(
+            invoice_id=invoice_id,
+            amount=amount,
+            currency="USD",
+            items=[{"name": "Account Withdrawal", "qty": "1", "price": str(amount)}],
+            data={
+                "first_name": current_user.username,
+                "email": current_user.email,
+                "redirect_url": f"{BASE_URL}/dashboard",
+                "notify_url": f"{BASE_URL}/api/payerurl-notify",
+                "cancel_url": f"{BASE_URL}/dashboard",
+            }
+        )
+
+        if response.get("status"):
+            # Deduct balance only if the API call was successful
+            current_user.balance -= amount
+            db.session.commit()
+            return jsonify({
+                "status": "success", 
+                "message": f"Withdrawal of ${amount} initiated!",
+                "payment_url": response.get("redirect_to")
+            })
+        else:
+            return jsonify({"status": "error", "message": "Payment gateway error."}), 400
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# --- PAYERURL WEBHOOK ROUTE ---
+@app.route('/api/payerurl-notify', methods=['POST'])
+def payerurl_notify():
+    data = request.json
+    invoice_id = data.get('invoice_id')
+    status = data.get('status')
+    app.logger.info(f"PayerURL Notification: {invoice_id} - {status}")
+    return jsonify({"status": "received"}), 200
 
 with app.app_context():
     db.create_all()
