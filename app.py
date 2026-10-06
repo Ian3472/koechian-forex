@@ -165,6 +165,7 @@ def deposit():
     current_user.balance += amount
     db.session.commit()
     return jsonify({"status": "success", "message": f"Deposit of ${amount} successful! New balance: ${current_user.balance}"})
+
 @app.route('/api/withdraw', methods=['POST'])
 @login_required
 def withdraw():
@@ -194,18 +195,19 @@ def withdraw():
         )
         
         if response.get("status"):
-    # Deduct balance only if the API call was successful
-    current_user.balance -= amount
-    db.session.commit()
-    return jsonify({
-        "status": "success", 
-        "message": f"Withdrawal of ${amount} initiated!",
-        "payment_url": response.get("redirect_to")
-    })
-else:
-    # Log the exact error from PayerURL
-    app.logger.error(f"PAYERURL API ERROR: {response}")
-    return jsonify({"status": "error", "message": f"PayerURL Error: {response.get('message', 'Unknown error')}"}), 400
+            # Deduct balance only if the API call was successful
+            current_user.balance -= amount
+            db.session.commit()
+            return jsonify({
+                "status": "success", 
+                "message": f"Withdrawal of ${amount} initiated!",
+                "payment_url": response.get("redirect_to")
+            })
+        else:
+            # Log the exact error from PayerURL
+            app.logger.error(f"PAYERURL API ERROR: {response}")
+            return jsonify({"status": "error", "message": f"PayerURL Error: {response.get('message', 'Unknown error')}"}), 400
+            
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
