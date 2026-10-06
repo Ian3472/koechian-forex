@@ -164,7 +164,9 @@ def withdraw():
         return jsonify({"status": "error", "message": "Insufficient funds!"})
     current_user.balance -= amount
     db.session.commit()
-    return jsonify({"status": "success", "message": f
+    # FIXED: Completed the jsonify dictionary and function call
+    return jsonify({"status": "success", "message": f"Withdrawal of ${amount} successful! New balance: ${current_user.balance}"})
+
 with app.app_context():
     db.create_all()
 
